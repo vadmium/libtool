@@ -183,7 +183,6 @@ $LIBTOOL --mode=install cp libdep.la "$DESTDIR$prefix"
 #   $CC -o libtest.so test.o -L"$DESTDIR$prefix" -L"$prefix" -ldep -L"$trickydir" -ltricky
 # Verify that the relink succeeds and it didn't search $prefix or find the
 # false libtricky there
-AT_XFAIL_IF([true])
 AT_CHECK([$LIBTOOL --mode=install cp libtest.la "$DESTDIR$prefix"],
   [0], [ignore], [ignore])
 
