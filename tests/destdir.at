@@ -139,4 +139,54 @@ fi
 
 AT_CLEANUP
 
+
+AT_SETUP([Not relinking against host library])
+AT_KEYWORDS([libtool])
+
+_LT_DIRSETUP
+trickydir="$(pwd)/trickydir"
+rm -rf "$trickydir"
+$mkdir_p "$trickydir"
+cd src
+
+# Create real libtricky and install directly into $trickydir
+echo "int tricky() { return 0; }" > tricky.c
+$LIBTOOL --mode=compile $CC $CPPFLAGS $CFLAGS -c tricky.c
+$LIBTOOL --mode=link $CC $CFLAGS $LDFLAGS -o libtricky.la tricky.lo -rpath "$trickydir"
+$LIBTOOL --mode=install cp libtricky.la "$trickydir/libtricky.la"
+$LIBTOOL --mode=clean rm -f libtricky.la
+
+# Create libdep, to be eventually installed into target's /$prefix, that
+# depends on libtricky
+echo "extern int tricky(); int dep() { return tricky(); }" > dep.c
+$LIBTOOL --mode=compile $CC $CPPFLAGS $CFLAGS -c -o dep.lo dep.c
+$LIBTOOL --mode=link $CC $CFLAGS $LDFLAGS -L"$trickydir" -ltricky -o libdep.la -rpath "$prefix" dep.lo
+
+# Create libtest, to also be eventually installed into target's /$prefix,
+# that depends on libdep
+echo "extern int tricky(), dep(); int test() { return dep() + tricky(); }" > test.c
+$LIBTOOL --mode=compile $CC $CPPFLAGS $CFLAGS -c -o test.lo test.c
+$LIBTOOL --mode=link $CC $CFLAGS $LDFLAGS libdep.la -o libtest.la -rpath "$prefix" test.lo
+
+# Install libdep into $DESTDIR/$prefix
+$LIBTOOL --mode=install cp libdep.la "$DESTDIR$prefix"
+
+# Create false libtricky and install directly into host's /$prefix
+# Not sure of a perfectly portable way of doing this; currently using an
+# empty lib.so file. With GCC this fails for me with the message
+#   libtricky.so: file not recognized: File truncated
+: > "$prefix/libtricky.so"
+
+# Install libtest to trigger a "relink". Relink command should be like
+#   $CC -o libtest.so test.o -L"$DESTDIR$prefix" -ldep -L"$trickydir" -ltricky
+# not like
+#   $CC -o libtest.so test.o -L"$DESTDIR$prefix" -L"$prefix" -ldep -L"$trickydir" -ltricky
+# Verify that the relink succeeds and it didn't search $prefix or find the
+# false libtricky there
+AT_XFAIL_IF([true])
+AT_CHECK([$LIBTOOL --mode=install cp libtest.la "$DESTDIR$prefix"],
+  [0], [ignore], [ignore])
+
+AT_CLEANUP
+
 m4_popdef([_LT_DIRSETUP])
